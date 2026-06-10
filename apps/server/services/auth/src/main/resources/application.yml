@@ -1,6 +1,17 @@
 server:
   port: 8081
 
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/minecloud
+    username: postgres
+    password: postgres
+
+jwt:
+  secret: org-feiesos-auth-jwt-secret-key-1428571428571
+  expire: 86400
+
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开发环境打印 SQL

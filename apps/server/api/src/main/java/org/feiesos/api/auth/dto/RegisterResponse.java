@@ -1,4 +1,4 @@
-package org.feiesos.common.security;
+package org.feiesos.api.auth.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,7 +9,11 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JwtClaims {
+public class RegisterResponse {
+
     private Long userId;
+
     private String username;
+
+    private String verificationToken;
 }
