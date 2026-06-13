@@ -10,7 +10,8 @@ spring:
 
 jwt:
   secret: org-feiesos-auth-jwt-secret-key-1428571428571
-  expire: 86400
+  access-expire: 900
+  refresh-expire: 604800
 
 mybatis-plus:
   configuration:

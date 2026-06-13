@@ -34,6 +34,8 @@ public class SysUser extends BaseEntity {
 
     private java.time.OffsetDateTime verifiedAt;
 
+    private java.time.OffsetDateTime verificationTokenExpireAt;
+
     @TableLogic
     private Boolean deleted;
 }

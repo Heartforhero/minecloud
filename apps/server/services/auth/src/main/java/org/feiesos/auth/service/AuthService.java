@@ -14,4 +14,6 @@ public interface AuthService {
     LoginResponse login(LoginRequest request);
 
     RegisterResponse resendVerification(String email);
+
+    LoginResponse refreshToken(String refreshToken);
 }

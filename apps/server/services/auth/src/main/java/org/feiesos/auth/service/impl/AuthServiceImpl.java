@@ -4,12 +4,15 @@ import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
 import org.feiesos.api.auth.dto.RegisterRequest;
 import org.feiesos.api.auth.dto.RegisterResponse;
+import org.feiesos.auth.entity.SysRefreshToken;
 import org.feiesos.auth.entity.SysUser;
+import org.feiesos.auth.mapper.RefreshTokenMapper;
 import org.feiesos.auth.mapper.UserMapper;
 import org.feiesos.auth.service.AuthService;
 import org.feiesos.auth.service.RateLimitService;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.common.security.JwtClaims;
+import org.feiesos.common.security.JwtProperties;
 import org.feiesos.common.security.JwtTokenProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -33,17 +36,23 @@ public class AuthServiceImpl implements AuthService {
     private static final Duration LOGIN_WINDOW = Duration.ofMinutes(15);
 
     private final UserMapper userMapper;
+    private final RefreshTokenMapper refreshTokenMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtProperties jwtProperties;
     private final RateLimitService rateLimitService;
 
     public AuthServiceImpl(UserMapper userMapper,
+                           RefreshTokenMapper refreshTokenMapper,
                            PasswordEncoder passwordEncoder,
                            JwtTokenProvider jwtTokenProvider,
+                           JwtProperties jwtProperties,
                            RateLimitService rateLimitService) {
         this.userMapper = userMapper;
+        this.refreshTokenMapper = refreshTokenMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtProperties = jwtProperties;
         this.rateLimitService = rateLimitService;
     }
 
@@ -74,6 +83,7 @@ public class AuthServiceImpl implements AuthService {
         user.setEmail(request.getEmail());
         user.setEnabled(false);
         user.setVerificationToken(UUID.randomUUID().toString());
+        user.setVerificationTokenExpireAt(OffsetDateTime.now().plusHours(24));
 
         userMapper.insert(user);
 
@@ -89,22 +99,29 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void verifyEmail(String token) {
-        System.out.println("-------------verifying email--------------");
         SysUser user = userMapper.findByVerificationToken(token);
-        if (user.getVerifiedAt() != null && user.getVerifiedAt().isBefore(OffsetDateTime.now())) {
-            throw new BusinessException("邮箱已被验证");
-        }
         if (user == null) {
             throw new BusinessException("验证令牌无效或已过期");
         }
 
+        if (user.getVerificationTokenExpireAt() != null
+                && user.getVerificationTokenExpireAt().isBefore(OffsetDateTime.now())) {
+            throw new BusinessException("验证令牌已过期");
+        }
+
+        if (Boolean.TRUE.equals(user.getEnabled())) {
+            throw new BusinessException("邮箱已被验证");
+        }
+
         user.setEnabled(true);
-        user.setVerifiedAt(java.time.OffsetDateTime.now());
+        user.setVerifiedAt(OffsetDateTime.now());
         user.setVerificationToken(null);
+        user.setVerificationTokenExpireAt(null);
         userMapper.updateById(user);
     }
 
     @Override
+    @Transactional
     public LoginResponse login(LoginRequest request) {
         String loginKey = "login:" + request.getUsername();
         if (rateLimitService.isRateLimited(loginKey, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW)) {
@@ -133,8 +150,17 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .build();
 
+        String refreshToken = UUID.randomUUID().toString();
+        SysRefreshToken refreshTokenEntity = new SysRefreshToken();
+        refreshTokenEntity.setUserId(user.getId());
+        refreshTokenEntity.setToken(refreshToken);
+        refreshTokenEntity.setExpiresAt(OffsetDateTime.now().plusSeconds(jwtProperties.getRefreshExpire()));
+        refreshTokenEntity.setRevoked(false);
+        refreshTokenMapper.insert(refreshTokenEntity);
+
         return LoginResponse.builder()
                 .token(jwtTokenProvider.createToken(claims))
+                .refreshToken(refreshToken)
                 .userId(user.getId())
                 .username(user.getUsername())
                 .nickname(user.getNickname())
@@ -154,12 +180,55 @@ public class AuthServiceImpl implements AuthService {
         }
 
         user.setVerificationToken(UUID.randomUUID().toString());
+        user.setVerificationTokenExpireAt(OffsetDateTime.now().plusHours(24));
         userMapper.updateById(user);
 
         return RegisterResponse.builder()
                 .userId(user.getId())
                 .username(user.getUsername())
                 .verificationToken(user.getVerificationToken())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public LoginResponse refreshToken(String refreshToken) {
+        SysRefreshToken stored = refreshTokenMapper.findByToken(refreshToken);
+        if (stored == null) {
+            throw new BusinessException(401, "refresh token 无效");
+        }
+
+        if (stored.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            throw new BusinessException(401, "refresh token 已过期");
+        }
+
+        stored.setRevoked(true);
+        refreshTokenMapper.updateById(stored);
+
+        SysUser user = userMapper.selectById(stored.getUserId());
+        if (user == null || !Boolean.TRUE.equals(user.getEnabled())) {
+            throw new BusinessException(401, "用户不存在或已禁用");
+        }
+
+        JwtClaims claims = JwtClaims.builder()
+                .userId(user.getId())
+                .username(user.getUsername())
+                .build();
+
+        String newRefreshToken = UUID.randomUUID().toString();
+        SysRefreshToken newEntity = new SysRefreshToken();
+        newEntity.setUserId(user.getId());
+        newEntity.setToken(newRefreshToken);
+        newEntity.setExpiresAt(OffsetDateTime.now().plusSeconds(jwtProperties.getRefreshExpire()));
+        newEntity.setRevoked(false);
+        refreshTokenMapper.insert(newEntity);
+
+        return LoginResponse.builder()
+                .token(jwtTokenProvider.createToken(claims))
+                .refreshToken(newRefreshToken)
+                .userId(user.getId())
+                .username(user.getUsername())
+                .nickname(user.getNickname())
                 .build();
     }
 }

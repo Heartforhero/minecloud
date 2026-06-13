@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.feiesos.api.auth.dto.LoginRequest;
 import org.feiesos.api.auth.dto.LoginResponse;
+import org.feiesos.api.auth.dto.RefreshRequest;
 import org.feiesos.api.auth.dto.RegisterRequest;
 import org.feiesos.api.auth.dto.RegisterResponse;
 import org.feiesos.common.result.R;
@@ -43,6 +44,12 @@ public class AuthController {
     @PostMapping("/resend-verification")
     public R<RegisterResponse> resendVerification(@RequestParam String email) {
         RegisterResponse response = authService.resendVerification(email);
+        return R.ok(response);
+    }
+
+    @PostMapping("/refresh")
+    public R<LoginResponse> refreshToken(@Valid @RequestBody RefreshRequest request) {
+        LoginResponse response = authService.refreshToken(request.getRefreshToken());
         return R.ok(response);
     }
 

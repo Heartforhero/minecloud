@@ -2,8 +2,9 @@ server:
   port: 8080
 
 jwt:
-  secret: org-feiesos-gateway-jwt-secret-key-must-be-at-least-32-bytes
-  expire: 86400
+  secret: org-feiesos-auth-jwt-secret-key-1428571428571
+  access-expire: 900
+  refresh-expire: 604800
 
 spring:
   cloud:
