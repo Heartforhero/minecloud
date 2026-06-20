@@ -7,6 +7,7 @@ import org.feiesos.common.result.R;
 import org.feiesos.storage.backend.StorageFacade;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.dto.StorageObject;
+import org.feiesos.storage.recycle.service.RecycleService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,9 +25,11 @@ import java.util.List;
 public class FileController {
 
     private final StorageFacade storageFacade;
+    private final RecycleService recycleService;
 
-    public FileController(StorageFacade storageFacade) {
+    public FileController(StorageFacade storageFacade, RecycleService recycleService) {
         this.storageFacade = storageFacade;
+        this.recycleService = recycleService;
     }
 
     @GetMapping("/list")
@@ -156,7 +159,7 @@ public class FileController {
     public R<String> delete(@PathVariable Long id, HttpServletRequest request) {
         try {
             Long userId = getUserId(request);
-            storageFacade.delete(id, userId);
+            recycleService.moveToRecycleBin(id, userId);
             return R.ok("已移入回收站");
         } catch (BusinessException e) {
             return R.fail(e.getCode(), e.getMessage());

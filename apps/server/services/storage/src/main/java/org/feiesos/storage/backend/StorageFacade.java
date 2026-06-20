@@ -1,7 +1,6 @@
 package org.feiesos.storage.backend;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.dto.StorageObject;
@@ -83,6 +82,7 @@ public class StorageFacade {
         if (!userId.equals(node.getOwnerId())) {
             throw new BusinessException(403, "无权访问该文件");
         }
+        ensureAncestorsAccessible(node, userId);
         StorageBackend backend = router.route(node);
         return backend.read(node.getStoragePath());
     }
@@ -185,29 +185,6 @@ public class StorageFacade {
     }
 
     @Transactional
-    public void delete(Long fileId, Long userId) {
-        authzService.checkPermission(userId, "file:delete");
-        FileNode node = fileNodeMapper.selectById(fileId);
-        if (node == null) {
-            throw new BusinessException("文件已不存在");
-        }
-        if (!userId.equals(node.getOwnerId())) {
-            throw new BusinessException(403, "无权删除该文件");
-        }
-
-        StorageBackend backend = router.route(node);
-        if (!node.getIsDir()) {
-            backend.delete(node.getStoragePath());
-        }
-
-        fileNodeMapper.update(null,
-                new LambdaUpdateWrapper<FileNode>()
-                        .eq(FileNode::getId, node.getId())
-                        .set(FileNode::getIsDeleted, true)
-                        .set(FileNode::getDeleteTime, LocalDateTime.now()));
-    }
-
-    @Transactional
     public FileNode createDirectory(String name, Long parentId, Long userId) {
         Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
                 .eq(FileNode::getParentId, parentId)
@@ -226,5 +203,19 @@ public class StorageFacade {
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);
         return node;
+    }
+
+    private void ensureAncestorsAccessible(FileNode node, Long userId) {
+        Long parentId = node.getParentId();
+        while (parentId != null && parentId != 0L) {
+            FileNode parent = fileNodeMapper.selectByIdIncludingDeleted(parentId);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted())) {
+                throw new BusinessException("文件不存在");
+            }
+            if (!userId.equals(parent.getOwnerId())) {
+                throw new BusinessException(403, "无权访问该文件");
+            }
+            parentId = parent.getParentId();
+        }
     }
 }
