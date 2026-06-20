@@ -3,10 +3,13 @@ package org.feiesos.storage.backend;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.feiesos.common.exception.BusinessException;
+import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.dto.StorageObject;
 import org.feiesos.storage.mapper.FileNodeMapper;
 import org.feiesos.storage.service.AuthzService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,19 +22,23 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Component
 public class StorageFacade {
 
+    private static final Logger log = LoggerFactory.getLogger(StorageFacade.class);
+
     private final AuthzService authzService;
     private final StorageRouter router;
     private final FileNodeMapper fileNodeMapper;
+    private final StorageProperties storageProperties;
 
-    public StorageFacade(AuthzService authzService, StorageRouter router, FileNodeMapper fileNodeMapper) {
+    public StorageFacade(AuthzService authzService, StorageRouter router,
+                         FileNodeMapper fileNodeMapper, StorageProperties storageProperties) {
         this.authzService = authzService;
         this.router = router;
         this.fileNodeMapper = fileNodeMapper;
+        this.storageProperties = storageProperties;
     }
 
     public Long resolvePathToId(String path, Long userId) {
@@ -41,6 +48,9 @@ public class StorageFacade {
         Long currentId = 0L;
         String[] parts = path.replaceAll("^/|/$", "").split("/");
         for (String part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
             FileNode node = fileNodeMapper.selectOne(new LambdaQueryWrapper<FileNode>()
                     .eq(FileNode::getName, part)
                     .eq(FileNode::getParentId, currentId)
@@ -56,6 +66,7 @@ public class StorageFacade {
     }
 
     public List<FileNode> listByParent(Long parentId, Long userId) {
+        authzService.checkPermission(userId, "file:read");
         return fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
                 .eq(FileNode::getParentId, parentId)
                 .eq(FileNode::getOwnerId, userId)
@@ -65,6 +76,7 @@ public class StorageFacade {
     }
 
     public List<FileNode> browse(String path, Long userId) {
+        authzService.checkPermission(userId, "file:read");
         Long targetId = resolvePathToId(path, userId);
         return fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
                 .eq(FileNode::getParentId, targetId)
@@ -90,6 +102,15 @@ public class StorageFacade {
     @Transactional
     public FileNode upload(String name, Long parentId, Long userId, InputStream data, long size) {
         authzService.checkPermission(userId, "file:write");
+
+        Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getParentId, parentId)
+                .eq(FileNode::getName, name)
+                .eq(FileNode::getIsDeleted, false));
+        if (count > 0) {
+            throw new BusinessException("该目录下已存在同名文件: " + name);
+        }
+
         String storagePath = UUID.randomUUID().toString() + "_" + name;
         StorageBackend backend = router.defaultBackend();
         try {
@@ -111,8 +132,9 @@ public class StorageFacade {
         return node;
     }
 
-    public void uploadChunk(String md5, int index, InputStream data, long size) {
-        String chunkPath = "temp/" + md5 + "/" + index;
+    public void uploadChunk(String md5, int index, Long userId, InputStream data, long size) {
+        authzService.checkPermission(userId, "file:write");
+        String chunkPath = chunkTempDir(userId) + "/" + md5 + "/" + index;
         try {
             router.defaultBackend().write(chunkPath, data, size);
         } finally {
@@ -124,7 +146,7 @@ public class StorageFacade {
     public FileNode mergeChunks(String md5, String fileName, Long parentId, Long userId) {
         authzService.checkPermission(userId, "file:write");
 
-        String tempPrefix = "temp/" + md5;
+        String tempPrefix = chunkTempDir(userId) + "/" + md5;
         StorageBackend backend = router.defaultBackend();
 
         if (!backend.exists(tempPrefix)) {
@@ -139,9 +161,18 @@ public class StorageFacade {
         chunkPaths = chunkPaths.stream()
                 .sorted(Comparator.comparingInt(p -> {
                     String name = p.substring(p.lastIndexOf('/') + 1);
-                    return Integer.parseInt(name);
+                    try {
+                        return Integer.parseInt(name);
+                    } catch (NumberFormatException e) {
+                        log.warn("分片名称非数字，跳过: {}", name);
+                        return Integer.MAX_VALUE;
+                    }
                 }))
-                .collect(Collectors.toList());
+                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+
+        if (chunkPaths.isEmpty()) {
+            throw new BusinessException("合并失败：无有效分片");
+        }
 
         String finalPath = UUID.randomUUID().toString() + "_" + fileName;
 
@@ -161,10 +192,7 @@ public class StorageFacade {
             }
         } finally {
             for (InputStream is : streams) {
-                try {
-                    is.close();
-                } catch (IOException ignored) {
-                }
+                try { is.close(); } catch (IOException ignored) {}
             }
         }
 
@@ -195,8 +223,10 @@ public class StorageFacade {
             throw new BusinessException(403, "无权删除该文件");
         }
 
-        StorageBackend backend = router.route(node);
-        if (!node.getIsDir()) {
+        if (node.getIsDir()) {
+            deleteChildrenRecursively(node.getId());
+        } else {
+            StorageBackend backend = router.route(node);
             backend.delete(node.getStoragePath());
         }
 
@@ -207,8 +237,28 @@ public class StorageFacade {
                         .set(FileNode::getDeleteTime, LocalDateTime.now()));
     }
 
+    private void deleteChildrenRecursively(Long parentId) {
+        List<FileNode> children = fileNodeMapper.selectList(new LambdaQueryWrapper<FileNode>()
+                .eq(FileNode::getParentId, parentId)
+                .eq(FileNode::getIsDeleted, false));
+        for (FileNode child : children) {
+            if (child.getIsDir()) {
+                deleteChildrenRecursively(child.getId());
+            } else {
+                StorageBackend backend = router.route(child);
+                backend.delete(child.getStoragePath());
+            }
+            fileNodeMapper.update(null,
+                    new LambdaUpdateWrapper<FileNode>()
+                            .eq(FileNode::getId, child.getId())
+                            .set(FileNode::getIsDeleted, true)
+                            .set(FileNode::getDeleteTime, LocalDateTime.now()));
+        }
+    }
+
     @Transactional
     public FileNode createDirectory(String name, Long parentId, Long userId) {
+        authzService.checkPermission(userId, "file:write");
         Long count = fileNodeMapper.selectCount(new LambdaQueryWrapper<FileNode>()
                 .eq(FileNode::getParentId, parentId)
                 .eq(FileNode::getName, name)
@@ -226,5 +276,16 @@ public class StorageFacade {
         node.setCreateTime(LocalDateTime.now());
         fileNodeMapper.insert(node);
         return node;
+    }
+
+    private String chunkTempDir(Long userId) {
+        String tempDir = storageProperties.getChunk().getTempDir();
+        if (tempDir == null || tempDir.isEmpty()) {
+            tempDir = "temp";
+        }
+        if (tempDir.endsWith("/")) {
+            tempDir = tempDir.substring(0, tempDir.length() - 1);
+        }
+        return tempDir + "/" + userId;
     }
 }

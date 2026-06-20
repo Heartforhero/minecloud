@@ -26,6 +26,6 @@ mybatis-plus:
 minecloud:
   storage:
     default-type: LOCAL
-    upload-path: D:/minecloud/data/  # /opt/minecloud/data
+    upload-path: ./data/storage
     chunk:
       temp-dir: temp
