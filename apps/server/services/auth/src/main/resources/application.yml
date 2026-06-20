@@ -1,0 +1,26 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/minecloud
+    username: postgres
+    password: postgres
+
+jwt:
+  secret: org-feiesos-auth-jwt-secret-key-1428571428571
+  access-expire: 900
+  refresh-expire: 604800
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开发环境打印 SQL
+    map-underscore-to-camel-case: true
+
+  global-config:
+    db-config:
+      id-type: assign_id # 使用雪花算法
+      logic-delete-field: deleted
+      logic-delete-value: "true"
+      logic-not-delete-value: "false"

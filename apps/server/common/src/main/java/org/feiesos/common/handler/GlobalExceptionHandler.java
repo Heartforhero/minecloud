@@ -23,6 +23,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public R<?> handleException(Exception e) {
+        log.error(e.getMessage());
         return R.fail(500, "系统繁忙，请稍后再试");
     }
 }

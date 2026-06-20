@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+jwt:
+  secret: org-feiesos-auth-jwt-secret-key-1428571428571
+  access-expire: 900
+  refresh-expire: 604800
+
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: auth
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: storage
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/v1/files/**
+  main:
+    web-application-type: reactive
