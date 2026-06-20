@@ -16,17 +16,25 @@ public class UserContextFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String userId = request.getHeader("X-User-Id");
+        String userIdHeader = request.getHeader("X-User-Id");
         String username = request.getHeader("X-Username");
 
-        if (userId == null || username == null) {
+        if (userIdHeader == null || username == null) {
             response.setStatus(401);
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"msg\":\"未认证\"}");
             return;
         }
 
-        request.setAttribute("currentUserId", Long.valueOf(userId));
+        try {
+            request.setAttribute("currentUserId", Long.valueOf(userIdHeader));
+        } catch (NumberFormatException e) {
+            response.setStatus(400);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":400,\"msg\":\"无效的用户标识\"}");
+            return;
+        }
+
         request.setAttribute("currentUsername", username);
 
         filterChain.doFilter(request, response);

@@ -20,6 +20,7 @@ public class FileNode {
     private Long size;
     private String fileHash;
     private String storagePath;
+    private String storageType;
     private Long ownerId;
     private LocalDateTime createTime;
     @TableLogic

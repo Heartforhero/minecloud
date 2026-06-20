@@ -24,5 +24,8 @@ mybatis-plus:
       logic-not-delete-value: "false" # 未删除状态的值
 
 minecloud:
-  upload:
-    path: D:/minecloud/data/  # /opt/minecloud/data
+  storage:
+    default-type: LOCAL
+    upload-path: D:/minecloud/data/  # /opt/minecloud/data
+    chunk:
+      temp-dir: temp

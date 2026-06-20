@@ -2,20 +2,20 @@ package org.feiesos.storage.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.feiesos.api.storage.dto.FileResourceDTO;
+import org.feiesos.common.exception.BusinessException;
 import org.feiesos.common.result.R;
+import org.feiesos.storage.backend.StorageFacade;
 import org.feiesos.storage.entity.FileNode;
-import org.feiesos.storage.mapper.FileNodeMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.feiesos.storage.service.FileService;
-import org.springframework.core.io.Resource;
+import org.feiesos.storage.dto.StorageObject;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Slf4j
@@ -23,39 +23,28 @@ import java.util.List;
 @RequestMapping("/api/v1/files")
 public class FileController {
 
-    private final FileNodeMapper fileNodeMapper;
-    private final FileService fileService;
+    private final StorageFacade storageFacade;
 
-    public FileController(FileNodeMapper fileNodeMapper, FileService fileService) {
-        this.fileNodeMapper = fileNodeMapper;
-        this.fileService = fileService;
+    public FileController(StorageFacade storageFacade) {
+        this.storageFacade = storageFacade;
     }
 
     @GetMapping("/list")
     public R<List<FileNode>> list(@RequestParam(defaultValue = "0") Long parentId,
                                    HttpServletRequest request) {
         Long userId = getUserId(request);
-        List<FileNode> list = fileNodeMapper.selectList(
-                new LambdaQueryWrapper<FileNode>()
-                        .eq(FileNode::getParentId, parentId)
-                        .eq(FileNode::getOwnerId, userId)
-                        .eq(FileNode::getIsDeleted, false)
-                        .orderByDesc(FileNode::getIsDir)
-                        .orderByDesc(FileNode::getCreateTime)
-        );
-        return R.ok(list);
+        return R.ok(storageFacade.listByParent(parentId, userId));
     }
 
     @GetMapping("/browse")
-    public R<List<FileNode>> browse(@RequestParam(value = "path", defaultValue = "/") String path,
+    public R<List<FileNode>> browse(@RequestParam(defaultValue = "/") String path,
                                      HttpServletRequest request) {
         try {
             if (!path.startsWith("/")) {
                 path = "/" + path;
             }
             Long userId = getUserId(request);
-            List<FileNode> list = fileService.listByPath(path, userId);
-            return R.ok(list);
+            return R.ok(storageFacade.browse(path, userId));
         } catch (Exception e) {
             log.warn("浏览目录失败: {}", e.getMessage());
             return R.fail(e.getMessage());
@@ -64,22 +53,23 @@ public class FileController {
 
     @PostMapping("/upload")
     public R<FileNode> upload(@RequestParam("file") MultipartFile file,
-                               @RequestParam(value = "path", defaultValue = "/") String path,
-                               HttpServletRequest request) throws IOException {
+                               @RequestParam(defaultValue = "/") String path,
+                               HttpServletRequest request) {
         if (file.isEmpty()) {
             return R.fail("上传失败：文件内容不能为空");
         }
-
         try {
             Long userId = getUserId(request);
-            log.info("开始接收上传文件: {}, 大小: {} bytes", file.getOriginalFilename(), file.getSize());
-            FileNode node = fileService.upload(file, path, userId);
+            Long parentId = storageFacade.resolvePathToId(path, userId);
+            log.info("接收上传文件: {}, 大小: {} bytes", file.getOriginalFilename(), file.getSize());
+            FileNode node = storageFacade.upload(
+                    file.getOriginalFilename(), parentId, userId,
+                    file.getInputStream(), file.getSize());
             return R.ok(node);
-        } catch (IOException e) {
-            log.error("文件存储发生 I/O 异常: ", e);
-            return R.fail("服务器磁盘写入异常，请检查存储路径权限");
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
-            log.error("文件上传系统异常: ", e);
+            log.error("文件上传异常: ", e);
             return R.fail("系统繁忙: " + e.getMessage());
         }
     }
@@ -87,32 +77,44 @@ public class FileController {
     @PostMapping("/chunk")
     public R<String> uploadChunk(@RequestParam("file") MultipartFile file,
                                   @RequestParam("md5") String md5,
-                                  @RequestParam("index") Integer index) throws IOException {
-        fileService.uploadChunk(file, md5, index);
-        return R.ok("分片 " + index + " 上传成功");
+                                  @RequestParam("index") Integer index) {
+        try {
+            storageFacade.uploadChunk(md5, index, file.getInputStream(), file.getSize());
+            return R.ok("分片 " + index + " 上传成功");
+        } catch (Exception e) {
+            log.error("分片上传异常: ", e);
+            return R.fail("分片上传失败: " + e.getMessage());
+        }
     }
 
     @PostMapping("/merge")
     public R<FileNode> merge(@RequestParam("md5") String md5,
                               @RequestParam("fileName") String fileName,
                               @RequestParam("path") String path,
-                              HttpServletRequest request) throws IOException {
-        Long userId = getUserId(request);
-        return R.ok(fileService.mergeChunks(md5, fileName, path, userId));
+                              HttpServletRequest request) {
+        try {
+            Long userId = getUserId(request);
+            Long parentId = storageFacade.resolvePathToId(path, userId);
+            return R.ok(storageFacade.mergeChunks(md5, fileName, parentId, userId));
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("合并分片异常: ", e);
+            return R.fail("合并失败: " + e.getMessage());
+        }
     }
 
     @PostMapping("/mkdir")
-    public R<FileNode> createDirectory(@RequestParam(value = "name") String name,
-                                        @RequestParam(value = "path", defaultValue = "/") String path,
+    public R<FileNode> createDirectory(@RequestParam String name,
+                                        @RequestParam(defaultValue = "/") String path,
                                         HttpServletRequest request) {
         if (name == null || name.trim().isEmpty()) {
             return R.fail("文件夹名称不能为空");
         }
-
         try {
             Long userId = getUserId(request);
-            FileNode node = fileService.createDirectory(name, path, userId);
-            return R.ok(node);
+            Long parentId = storageFacade.resolvePathToId(path, userId);
+            return R.ok(storageFacade.createDirectory(name, parentId, userId));
         } catch (Exception e) {
             log.error("新建文件夹失败", e);
             return R.fail("新建文件夹失败：" + e.getMessage());
@@ -120,21 +122,30 @@ public class FileController {
     }
 
     @GetMapping("/download/{id}")
-    public ResponseEntity<Resource> download(@PathVariable("id") Long id,
-                                              HttpServletRequest request) {
+    public ResponseEntity<StreamingResponseBody> download(@PathVariable Long id,
+                                                           HttpServletRequest request) {
         try {
             Long userId = getUserId(request);
-            FileResourceDTO fileResource = fileService.download(id, userId);
+            StorageObject storageObj = storageFacade.download(id, userId);
 
-            String contentDisposition = "attachment; filename=\"" +
-                    java.net.URLEncoder.encode(fileResource.getFileName(), "UTF-8") + "\"";
+            StreamingResponseBody body = outputStream -> {
+                try (storageObj) {
+                    storageObj.getInputStream().transferTo(outputStream);
+                }
+            };
 
             return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition)
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" +
+                                    URLEncoder.encode(storageObj.getFilename(), StandardCharsets.UTF_8) + "\"")
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .contentLength(fileResource.getFileSize())
-                    .body(fileResource.getResource());
-
+                    .contentLength(storageObj.getSize())
+                    .body(body);
+        } catch (BusinessException e) {
+            if (e.getCode() == 403) {
+                return ResponseEntity.status(403).build();
+            }
+            return ResponseEntity.notFound().build();
         } catch (Exception e) {
             log.error("下载文件失败, id: {}", id, e);
             return ResponseEntity.notFound().build();
@@ -142,12 +153,13 @@ public class FileController {
     }
 
     @DeleteMapping("/{id}")
-    public R<String> delete(@PathVariable("id") Long id,
-                             HttpServletRequest request) {
+    public R<String> delete(@PathVariable Long id, HttpServletRequest request) {
         try {
             Long userId = getUserId(request);
-            fileService.softDelete(id, userId);
+            storageFacade.delete(id, userId);
             return R.ok("已移入回收站");
+        } catch (BusinessException e) {
+            return R.fail(e.getCode(), e.getMessage());
         } catch (Exception e) {
             log.error("删除文件异常, id: {}", id, e);
             return R.fail("删除失败: " + e.getMessage());
@@ -157,7 +169,7 @@ public class FileController {
     private Long getUserId(HttpServletRequest request) {
         Object userId = request.getAttribute("currentUserId");
         if (userId == null) {
-            throw new RuntimeException("未获取到用户信息");
+            throw new BusinessException(401, "未认证");
         }
         return (Long) userId;
     }
