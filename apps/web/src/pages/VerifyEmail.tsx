@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { verifyEmail } from '../api/auth';
+import Logo from '../components/Logo';
 import './AuthPage.css';
 
 export default function VerifyEmail() {
@@ -16,39 +17,23 @@ export default function VerifyEmail() {
       return;
     }
     verifyEmail(token)
-      .then(() => {
-        setStatus('success');
-        setMessage('邮箱验证成功！你现在可以登录了。');
-      })
-      .catch((err) => {
-        setStatus('error');
-        setMessage(err instanceof Error ? err.message : '验证失败');
-      });
+      .then(() => { setStatus('success'); setMessage('邮箱验证成功。'); })
+      .catch((err) => { setStatus('error'); setMessage(err instanceof Error ? err.message : '验证失败'); });
   }, [token]);
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-wrapper">
         <div className="auth-logo">
-          <h1>Minecloud</h1>
-          <p>邮箱验证</p>
+          <Logo />
+          <h1>邮箱验证</h1>
         </div>
-        {status === 'loading' && (
-          <p style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-            正在验证...
-          </p>
-        )}
-        {status === 'success' && (
-          <div className="auth-success">{message}</div>
-        )}
-        {status === 'error' && (
-          <div className="auth-error">{message}</div>
-        )}
-        {(status === 'success' || status === 'error') && (
-          <div className="auth-switch" style={{ marginTop: '1rem' }}>
-            <Link to="/login">去登录</Link>
-          </div>
-        )}
+        <div className="auth-card">
+          {status === 'loading' && <p style={{ margin: 0, textAlign: 'center' }}>验证中...</p>}
+          {status === 'success' && <div className="auth-success" style={{ marginBottom: 0 }}>{message}</div>}
+          {status === 'error' && <div className="auth-error" style={{ marginBottom: 0 }}>{message}</div>}
+        </div>
+        <Link to="/login" className="auth-link">返回登录</Link>
       </div>
     </div>
   );

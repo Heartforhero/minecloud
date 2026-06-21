@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login } from '../api/auth';
+import Logo from '../components/Logo';
 import './AuthPage.css';
 
 export default function Login() {
@@ -30,45 +31,47 @@ export default function Login() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-wrapper">
         <div className="auth-logo">
-          <h1>Minecloud</h1>
-          <p>登录你的私有云</p>
+          <Logo />
+          <h1>登录 Minecloud</h1>
         </div>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          {error && <div className="auth-error">{error}</div>}
-          <div className="form-group">
-            <label htmlFor="username">用户名</label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="请输入用户名"
-              autoComplete="username"
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="password">密码</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              autoComplete="current-password"
-            />
-          </div>
-          <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? '登录中...' : '登录'}
-          </button>
-        </form>
+        <div className="auth-card">
+          <form onSubmit={handleSubmit}>
+            {error && <div className="auth-error">{error}</div>}
+            <div className="form-group">
+              <label htmlFor="username">用户名</label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="password">
+                密码
+                <Link to="/forgot-password" style={{ float: 'right', fontWeight: 400, fontSize: '0.8125rem' }}>
+                  忘记密码?
+                </Link>
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            <button className="btn-primary" type="submit" disabled={loading}>
+              {loading ? '登录中...' : '登录'}
+            </button>
+          </form>
+        </div>
         <div className="auth-switch">
-          还没有账号？<Link to="/register">立即注册</Link>
-        </div>
-        <div className="auth-switch" style={{ marginTop: '0.5rem' }}>
-          <Link to="/forgot-password">忘记密码？</Link>
+          新用户? <Link to="/register">创建账号</Link>
         </div>
       </div>
     </div>
