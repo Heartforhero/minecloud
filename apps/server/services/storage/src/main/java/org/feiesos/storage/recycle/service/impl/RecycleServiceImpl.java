@@ -5,11 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.storage.backend.StorageBackend;
 import org.feiesos.storage.backend.StorageRouter;
+import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.mapper.FileNodeMapper;
 import org.feiesos.storage.recycle.dto.RecycleItemDTO;
 import org.feiesos.storage.recycle.service.RecycleService;
 import org.feiesos.storage.service.AuthzService;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,13 +34,16 @@ public class RecycleServiceImpl implements RecycleService {
     private final AuthzService authzService;
     private final StorageRouter storageRouter;
     private final FileNodeMapper fileNodeMapper;
+    private final StorageProperties storageProperties;
 
     public RecycleServiceImpl(AuthzService authzService,
                               StorageRouter storageRouter,
-                              FileNodeMapper fileNodeMapper) {
+                              FileNodeMapper fileNodeMapper,
+                              StorageProperties storageProperties) {
         this.authzService = authzService;
         this.storageRouter = storageRouter;
         this.fileNodeMapper = fileNodeMapper;
+        this.storageProperties = storageProperties;
     }
 
     @Override
@@ -102,6 +107,38 @@ public class RecycleServiceImpl implements RecycleService {
         if (!ids.isEmpty()) {
             fileNodeMapper.hardDeleteByIds(ids);
         }
+    }
+
+    @Override
+    @Transactional
+    public void purgeExpired(int retentionDays) {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        List<FileNode> expiredRoots = fileNodeMapper.selectExpiredDeletedRoots(cutoff);
+        for (FileNode root : expiredRoots) {
+            try {
+                List<FileNode> subtree = loadSubtree(root);
+                subtree.stream()
+                        .filter(node -> Boolean.FALSE.equals(node.getIsDir()))
+                        .filter(node -> node.getStoragePath() != null && !node.getStoragePath().isBlank())
+                        .forEach(this::deletePhysicalObjectQuietly);
+                List<Long> ids = extractIds(subtree);
+                if (!ids.isEmpty()) {
+                    fileNodeMapper.hardDeleteByIds(ids);
+                }
+            } catch (Exception e) {
+                log.error("定时清理回收站节点失败, id: {}", root.getId(), e);
+            }
+        }
+        if (!expiredRoots.isEmpty()) {
+            log.info("定时清理完成, 共清理 {} 个回收站根节点", expiredRoots.size());
+        }
+    }
+
+    @Scheduled(cron = "${minecloud.storage.recycle.cleanup-cron:0 0 3 * * ?}")
+    public void scheduledCleanup() {
+        int retentionDays = storageProperties.getRecycle().getRetentionDays();
+        log.info("开始定时清理回收站 (保留天数: {}): ", retentionDays);
+        purgeExpired(retentionDays);
     }
 
     private RecycleItemDTO toRecycleItem(FileNode node) {

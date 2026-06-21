@@ -3,6 +3,7 @@ package org.feiesos.storage.recycle.service.impl;
 import org.feiesos.common.exception.BusinessException;
 import org.feiesos.storage.backend.StorageBackend;
 import org.feiesos.storage.backend.StorageRouter;
+import org.feiesos.storage.config.StorageProperties;
 import org.feiesos.storage.entity.FileNode;
 import org.feiesos.storage.mapper.FileNodeMapper;
 import org.feiesos.storage.recycle.dto.RecycleItemDTO;
@@ -46,11 +47,14 @@ class RecycleServiceImplTest {
     @Mock
     private StorageBackend storageBackend;
 
+    @Mock
+    private StorageProperties storageProperties;
+
     private RecycleServiceImpl recycleService;
 
     @BeforeEach
     void setUp() {
-        recycleService = new RecycleServiceImpl(authzService, storageRouter, fileNodeMapper);
+        recycleService = new RecycleServiceImpl(authzService, storageRouter, fileNodeMapper, storageProperties);
     }
 
     @Test

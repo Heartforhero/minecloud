@@ -83,6 +83,20 @@ public interface FileNodeMapper extends BaseMapper<FileNode> {
             """)
     int restoreDeleted(@Param("userId") Long userId, @Param("ids") Collection<Long> ids);
 
+    @Select("""
+            <script>
+            SELECT
+            """ + BASE_COLUMNS + """
+            FROM file_node fn
+            WHERE fn.is_deleted = true
+              AND fn.delete_time &lt; #{cutoff}
+              AND (fn.parent_id IS NULL OR fn.parent_id = 0 OR
+                   NOT EXISTS (SELECT 1 FROM file_node p WHERE p.id = fn.parent_id AND p.is_deleted = true))
+            ORDER BY fn.delete_time ASC
+            </script>
+            """)
+    List<FileNode> selectExpiredDeletedRoots(@Param("cutoff") LocalDateTime cutoff);
+
     @Delete("""
             <script>
             DELETE FROM file_node

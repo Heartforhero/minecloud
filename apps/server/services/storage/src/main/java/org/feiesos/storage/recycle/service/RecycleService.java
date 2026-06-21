@@ -13,4 +13,6 @@ public interface RecycleService {
     void restore(Long fileId, Long userId);
 
     void purge(Long fileId, Long userId);
+
+    void purgeExpired(int retentionDays);
 }
