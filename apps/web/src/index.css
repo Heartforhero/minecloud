@@ -8,33 +8,32 @@
 
 :root {
   --color-bg: #ffffff;
-  --color-canvas: #f6f8fa;
+  --color-canvas: #ffffff;
   --color-border: #d0d7de;
   --color-border-muted: #d8dee4;
   --color-text: #1f2328;
   --color-text-secondary: #656d76;
   --color-text-tertiary: #8b949e;
-  --color-primary: #0969da;
-  --color-primary-hover: #0860ca;
+  --color-accent: #0969da;
+  --color-accent-hover: #0860ca;
+  --color-success: #1a7f37;
+  --color-success-hover: #157030;
   --color-error: #cf222e;
   --color-error-bg: #fff1f0;
   --color-error-border: #ffc0bf;
-  --color-success: #1a7f37;
   --color-success-bg: #dafbe1;
   --color-success-border: #aceebb;
   --radius: 6px;
   --radius-lg: 12px;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
-    Helvetica, Arial, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
+    Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
 }
 
-html {
-  font-size: 16px;
-}
+html { font-size: 16px; }
 
 body {
-  font-family: var(--font-sans);
-  background: var(--color-bg);
+  font-family: var(--font);
+  background: var(--color-canvas);
   color: var(--color-text);
   line-height: 1.5;
   min-height: 100vh;
@@ -54,10 +53,8 @@ input {
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--color-accent);
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
-}
+a:hover { text-decoration: underline; }

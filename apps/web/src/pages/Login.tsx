@@ -32,47 +32,63 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-wrapper">
-        <div className="auth-logo">
-          <Logo />
-          <h1>登录 Minecloud</h1>
+        <div className="auth-wrapper-inner">
+          <div className="auth-header">
+            <Logo />
+            <h1>登录 Minecloud</h1>
+          </div>
+
+          <div className="auth-card">
+            <form onSubmit={handleSubmit}>
+              {error && <div className="auth-error">{error}</div>}
+
+              <div className="form-group">
+                <label htmlFor="lf">用户名或邮箱</label>
+                <input
+                  id="lf"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <div className="password-label-row">
+                  <label htmlFor="pf">密码</label>
+                  <Link to="/forgot-password">忘记密码?</Link>
+                </div>
+                <input
+                  id="pf"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <button className="btn-primary" type="submit" disabled={loading}>
+                {loading ? '登录中...' : '登录'}
+              </button>
+            </form>
+          </div>
+
+          <div className="auth-switch">
+            新用户? <Link to="/register">创建账号</Link>
+          </div>
         </div>
-        <div className="auth-card">
-          <form onSubmit={handleSubmit}>
-            {error && <div className="auth-error">{error}</div>}
-            <div className="form-group">
-              <label htmlFor="username">用户名</label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="password">
-                密码
-                <Link to="/forgot-password" style={{ float: 'right', fontWeight: 400, fontSize: '0.8125rem' }}>
-                  忘记密码?
-                </Link>
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
-            </div>
-            <button className="btn-primary" type="submit" disabled={loading}>
-              {loading ? '登录中...' : '登录'}
-            </button>
-          </form>
-        </div>
-        <div className="auth-switch">
-          新用户? <Link to="/register">创建账号</Link>
-        </div>
+      </div>
+
+      <div className="auth-footer">
+        <ul>
+          <li><a href="#">条款</a></li>
+          <li><a href="#">隐私</a></li>
+          <li><a href="#">文档</a></li>
+          <li><a href="#">联系</a></li>
+        </ul>
       </div>
     </div>
   );
