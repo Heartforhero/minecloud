@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { getStoredUser } from '../api/auth';
 import Logo from './Logo';
 import './AppHeader.css';
@@ -11,10 +12,10 @@ export default function AppHeader({ title, onLogout }: Props) {
   const user = getStoredUser();
   return (
     <header className="app-header">
-      <div className="app-header-left">
+      <Link to="/" className="app-header-left">
         <Logo />
         <span>minecloud</span>
-      </div>
+      </Link>
       {title && (
         <div className="app-header-center">
           <span className="app-header-title">{title}</span>
