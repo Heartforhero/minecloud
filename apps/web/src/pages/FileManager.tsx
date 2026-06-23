@@ -17,6 +17,7 @@ import {
   batchCopy,
 } from '../api/files';
 import { computeMD5 } from '../utils/hash';
+import { searchFiles, type SearchResult, type SearchParams } from '../api/search';
 import AppHeader from '../components/AppHeader';
 import DirIcon from '../components/DirIcon';
 import FileIcon from '../components/FileIcon';
@@ -54,6 +55,13 @@ export default function FileManager() {
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [previewItem, setPreviewItem] = useState<{ id: string; name: string } | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchType, setSearchType] = useState<'all' | 'file' | 'folder'>('all');
+  const [searchSort, setSearchSort] = useState<'date' | 'name' | 'size'>('date');
+  const [searchOrder, setSearchOrder] = useState<'desc' | 'asc'>('desc');
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const uploadRef = useRef<HTMLInputElement>(null);
   const newFolderRef = useRef<HTMLInputElement>(null);
@@ -115,6 +123,31 @@ export default function FileManager() {
       setError('');
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
+    }
+  }
+
+  function clearSearch() {
+    setSearchQuery('');
+    setSearchResults(null);
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults(null);
+      return;
+    }
+    try {
+      const params: SearchParams = { q };
+      if (searchType !== 'all') params.type = searchType;
+      params.sort = searchSort;
+      params.order = searchOrder;
+      const res = await searchFiles(params);
+      setSearchResults(res.items);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '搜索失败');
     }
   }
 
@@ -338,9 +371,113 @@ export default function FileManager() {
             </div>
           </div>
 
+          <form className="fm-search-bar" onSubmit={handleSearch}>
+            <input
+              ref={searchInputRef}
+              className="fm-search-input"
+              type="text"
+              placeholder="搜索文件…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <select
+              className="fm-search-select"
+              value={searchType}
+              onChange={(e) => setSearchType(e.target.value as typeof searchType)}
+            >
+              <option value="all">全部</option>
+              <option value="file">文件</option>
+              <option value="folder">文件夹</option>
+            </select>
+            <select
+              className="fm-search-select"
+              value={searchSort}
+              onChange={(e) => setSearchSort(e.target.value as typeof searchSort)}
+            >
+              <option value="date">日期</option>
+              <option value="name">名称</option>
+              <option value="size">大小</option>
+            </select>
+            <button
+              type="button"
+              className="fm-search-order"
+              onClick={() => setSearchOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+              title={searchOrder === 'desc' ? '降序' : '升序'}
+            >
+              {searchOrder === 'desc' ? '↓' : '↑'}
+            </button>
+            <button className="fm-btn fm-btn-action" type="submit">搜索</button>
+            {searchResults !== null && (
+              <button className="fm-btn fm-btn-link" type="button" onClick={clearSearch}>
+                清除
+              </button>
+            )}
+          </form>
+
           {error && <div className="fm-error">{error}</div>}
 
-          {isLoading ? (
+          {searchResults !== null ? (
+            searchResults.length === 0 ? (
+              <div className="fm-empty">
+                <p className="fm-empty-text">未找到匹配的文件</p>
+              </div>
+            ) : (
+              <div className="fm-table-wrap">
+                <table className="fm-table">
+                  <thead>
+                    <tr>
+                      <th className="fm-th-name">名称</th>
+                      <th className="fm-th-path">路径</th>
+                      <th className="fm-th-size">大小</th>
+                      <th className="fm-th-date">创建时间</th>
+                      <th className="fm-th-action" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchResults.map((item) => (
+                      <tr key={item.id} className="fm-row">
+                        <td className="fm-cell-name">
+                          {item.isDir ? (
+                            <button className="fm-name-link" onClick={() => { navigateToDir(item.id, item.name); clearSearch(); }}>
+                              <DirIcon />
+                              <span>{item.name}</span>
+                            </button>
+                          ) : (
+                            <button
+                              className="fm-name-link fm-btn-name"
+                              onClick={() => setPreviewItem({ id: item.id, name: item.name })}
+                            >
+                              <FileIcon name={item.name} />
+                              <span>{item.name}</span>
+                            </button>
+                          )}
+                        </td>
+                        <td className="fm-cell-path">{item.path}</td>
+                        <td className="fm-cell-size">{item.isDir ? '—' : formatSize(item.size)}</td>
+                        <td className="fm-cell-date">{formatRelativeDate(item.createTime)}</td>
+                        <td className="fm-cell-action">
+                          <div className="fm-row-actions">
+                            {!item.isDir && (
+                              <button
+                                className="fm-btn fm-btn-row"
+                                title="下载"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  downloadFile(item.id, item.name);
+                                }}
+                              >
+                                <DownloadIcon size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : isLoading ? (
             <LoadingSpinner />
           ) : items.length === 0 && !showNewFolder && selectedIds.size === 0 ? (
             <div className="fm-empty">

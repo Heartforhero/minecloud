@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.feiesos.search.mapper.FileNodeMapper">
+
+    <select id="search" resultType="org.feiesos.search.dto.SearchResultDTO">
+        SELECT id, name, parent_id, is_dir, size, create_time
+        FROM file_node
+        WHERE owner_id = #{userId}
+          AND is_deleted = false
+          AND name ILIKE '%' || #{keyword} || '%'
+          <if test="isDir != null">
+              AND is_dir = #{isDir}
+          </if>
+        ORDER BY
+          <choose>
+              <when test="sortField == 'name'">name</when>
+              <when test="sortField == 'size'">size</when>
+              <otherwise>create_time</otherwise>
+          </choose>
+          <choose>
+              <when test="sortOrder == 'asc'">ASC</when>
+              <otherwise>DESC</otherwise>
+          </choose>
+        LIMIT #{limit}
+        OFFSET #{offset}
+    </select>
+
+    <select id="selectNodesByIds" resultType="org.feiesos.search.dto.NodeInfo">
+        SELECT id, name, parent_id FROM file_node WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="countSearch" resultType="int">
+        SELECT COUNT(*)
+        FROM file_node
+        WHERE owner_id = #{userId}
+          AND is_deleted = false
+          AND name ILIKE '%' || #{keyword} || '%'
+          <if test="isDir != null">
+              AND is_dir = #{isDir}
+          </if>
+    </select>
+
+</mapper>
