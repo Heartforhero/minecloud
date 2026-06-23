@@ -13,6 +13,7 @@
         <module>storage</module>
         <module>auth</module>
         <module>share</module>
+        <module>search</module>
     </modules>
 
     <artifactId>services</artifactId>

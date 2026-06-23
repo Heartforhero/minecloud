@@ -22,5 +22,9 @@ spring:
           uri: http://localhost:8083
           predicates:
             - Path=/api/v1/share/**
+        - id: search
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/v1/search/**
   main:
     web-application-type: reactive

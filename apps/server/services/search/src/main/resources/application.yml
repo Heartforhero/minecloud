@@ -1,0 +1,25 @@
+server:
+  port: 8084
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/minecloud
+    username: postgres
+    password: postgres
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: assign_id
+
+minecloud:
+  auth:
+    url: http://localhost:8081
+
+jwt:
+  secret: org-feiesos-auth-jwt-secret-key-1428571428571
+  access-expire: 900
+  refresh-expire: 604800
