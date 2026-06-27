@@ -7,6 +7,8 @@ jwt:
   refresh-expire: 604800
 
 spring:
+  codec:
+    max-in-memory-size: 16MB
   cloud:
     gateway:
       routes:
